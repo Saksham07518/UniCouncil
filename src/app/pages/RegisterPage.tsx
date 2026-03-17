@@ -202,11 +202,17 @@ export function RegisterPage() {
                                 </Button>
                             </form>
 
-                            <div className="mt-6 text-center">
+                            <div className="mt-6 text-center space-y-2">
                                 <p className="text-sm text-muted-foreground">
                                     Already registered?{' '}
                                     <Link to="/login" className="text-primary hover:underline font-medium">
                                         Login here
+                                    </Link>
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                    Are you an admin?{' '}
+                                    <Link to="/admin/login" className="text-primary hover:underline font-medium">
+                                        Admin Login
                                     </Link>
                                 </p>
                             </div>
