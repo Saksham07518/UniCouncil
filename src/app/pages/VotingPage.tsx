@@ -343,6 +343,13 @@ export function VotingPage() {
                   We sent a 6-digit code to <span className="font-semibold">{email}</span>
                 </p>
               </div>
+
+              {/* Mobile-friendly OTP Display for Development */}
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg mb-4 text-center">
+                <p className="text-xs text-yellow-600 font-bold uppercase tracking-wider mb-1">On Screen OTP</p>
+                <p className="text-sm text-yellow-800">Your verification code is:</p>
+                <p className="text-3xl font-black text-yellow-900 mt-1 tracking-[0.5em]">{expectedOtp}</p>
+              </div>
               <Input
                 label="Enter Verification Code"
                 type="text"

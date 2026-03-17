@@ -41,7 +41,7 @@ export function ProfilePage() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Phone Number</p>
-                  <p className="text-foreground">+{user.phone || 'Not set'}</p>
+                  <p className="text-foreground">{user.phone?.startsWith('+') ? user.phone : `+${user.phone}` || 'Not set'}</p>
                 </div>
               </div>
 

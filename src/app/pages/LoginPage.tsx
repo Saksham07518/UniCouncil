@@ -154,8 +154,25 @@ export function LoginPage() {
                 </div>
                 <div>
                   <h2 className="mb-0">Secure Login</h2>
-                  <p className="text-sm text-muted-foreground">We'll send you an OTP via SMS</p>
+                  <p className="text-sm text-muted-foreground">We'll send you an OTP via SMS or WhatsApp</p>
                 </div>
+              </div>
+
+              {/* WhatsApp QR Code Section */}
+              <div className="mb-6 p-5 bg-green-50/50 rounded-xl border border-green-100 flex flex-col items-center text-center">
+                <p className="text-sm text-green-800 font-medium mb-3">
+                  Scan this QR code so you can receive OTP messages securely on your WhatsApp:
+                </p>
+                <div className="w-40 h-40 bg-white p-2 rounded-xl shadow-sm mb-3">
+                  <ImageWithFallback
+                    src="/whatsapp-qr.png"
+                    alt="WhatsApp QR Code"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <p className="text-xs text-green-600">
+                  Please scan the code above using WhatsApp before requesting your OTP.
+                </p>
               </div>
 
               <form onSubmit={handleSendOTP} className="space-y-4">

@@ -6,6 +6,7 @@ export interface User {
   id: string;
   name: string;
   phone: string;
+  email?: string;
   rollNumber: string;
   role: 'student' | 'admin';
   hasVoted: boolean;
@@ -31,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) {
-        fetchProfile(session.user.id);
+        fetchProfile(session);
       } else {
         setLoading(false);
       }
@@ -41,7 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) {
-        fetchProfile(session.user.id);
+        fetchProfile(session);
       } else {
         setUser(null);
         setLoading(false);
@@ -51,26 +52,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (session: Session) => {
+    const userId = session.user.id;
+    const email = session.user.email;
     try {
       setLoading(true);
-      let { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
 
-      // Sometimes trigger takes a moment to reflect or profile is missing
-      if (!data && !error) {
-        console.log('Profile not found immediately, retrying in 1s...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        const retryResponse = await supabase
+      let data = null;
+      let error = null;
+      let retries = 0;
+      const MAX_RETRIES = 5;
+
+      // Aggressively poll the database for up to 5 seconds to give the Database Trigger time to finish
+      while (retries < MAX_RETRIES) {
+        const response = await supabase
           .from('profiles')
           .select('*')
           .eq('id', userId)
           .maybeSingle();
-        data = retryResponse.data;
-        error = retryResponse.error;
+
+        data = response.data;
+        error = response.error;
+
+        if (data) break; // Profile found! Exit the loop immediately.
+
+        console.log(`Profile not found yet. Retrying in 1s... (Attempt ${retries + 1}/${MAX_RETRIES})`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        retries++;
       }
 
       if (error) {
@@ -80,12 +88,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           id: data.id,
           name: data.name,
           phone: data.phone,
+          email: email,
           rollNumber: data.roll_number,
           role: data.role as 'student' | 'admin',
           hasVoted: data.has_voted,
         });
       } else {
-        console.warn('Profile still not found after retry.');
+        console.warn('Profile still not found after 5 retries. The database trigger might be failing.');
       }
     } finally {
       setLoading(false);

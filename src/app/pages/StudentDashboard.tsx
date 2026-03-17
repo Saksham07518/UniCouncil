@@ -3,6 +3,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { Sidebar } from '@/app/components/Sidebar';
 import { Card } from '@/app/components/Card';
 import { Button } from '@/app/components/Button';
+import { supabase } from '@/app/lib/supabase';
 import { currentElection, announcements } from '@/app/data/mockData';
 import { Clock, Users, Vote, AlertCircle, Brain } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -11,6 +12,37 @@ export function StudentDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [timeRemaining, setTimeRemaining] = useState('');
+  const [votedCount, setVotedCount] = useState<number>(0);
+  const [totalVoters, setTotalVoters] = useState<number>(currentElection.totalVoters);
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
+
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        // Fetch real-time turnout
+        const { data: voteData, error: voteError } = await supabase.from('votes').select('voter_id');
+        if (voteError) throw voteError;
+
+        if (voteData) {
+          const uniqueVoters = new Set(voteData.map(v => v.voter_id));
+          setVotedCount(uniqueVoters.size);
+        }
+
+        // Fetch total registered students
+        const { count } = await supabase
+          .from('registered_students')
+          .select('*', { count: 'exact', head: true });
+
+        if (count !== null) setTotalVoters(count);
+      } catch (err) {
+        console.error('Error fetching dashboard stats:', err);
+      } finally {
+        setIsLoadingStats(false);
+      }
+    }
+
+    fetchStats();
+  }, []);
 
   useEffect(() => {
     const calculateTimeRemaining = () => {
@@ -50,12 +82,12 @@ export function StudentDashboard() {
     );
   };
 
-  const votingPercentage = (currentElection.votedCount / currentElection.totalVoters) * 100;
+  const votingPercentage = totalVoters > 0 ? (votedCount / totalVoters) * 100 : 0;
 
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar />
-      
+
       <div className="flex-1 p-8">
         <div className="max-w-6xl mx-auto">
           {/* Header */}

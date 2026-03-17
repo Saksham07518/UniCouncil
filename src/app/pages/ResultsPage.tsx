@@ -4,7 +4,7 @@ import { Card } from '@/app/components/Card';
 import { candidates, currentElection, positions } from '@/app/data/mockData';
 import { supabase } from '@/app/lib/supabase';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, LineChart, Line, Legend } from 'recharts';
-import { Trophy, AlertCircle, Download, PieChart as PieChartIcon, TrendingUp, Loader2 } from 'lucide-react';
+import { Trophy, AlertCircle, Download, PieChart as PieChartIcon, TrendingUp, Loader2, ShieldCheck } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -30,20 +30,34 @@ export function ResultsPage() {
   useEffect(() => {
     async function fetchResults() {
       try {
-        const { data: voteData, error: voteError } = await supabase.rpc('get_vote_counts');
-        if (voteError) throw voteError;
+        const { data: votesData, error: votesError } = await supabase.from('votes').select('candidate_id, voter_id');
+        if (votesError) throw votesError;
 
-        const { data: turnoutData, error: turnoutError } = await supabase.rpc('get_voter_turnout');
-        if (turnoutError) throw turnoutError;
+        const { count: realTotal, error: countError } = await supabase
+          .from('registered_students')
+          .select('*', { count: 'exact', head: true });
+        if (countError) throw countError;
 
-        if (voteData) {
-          setRealResults(voteData.map((v: any) => ({
-            candidateId: v.candidate_id,
-            votes: Number(v.vote_count)
+        if (votesData) {
+          // Count votes per candidate
+          const counts: Record<string, number> = {};
+          const uniqueVoters = new Set<string>();
+
+          votesData.forEach(vote => {
+            counts[vote.candidate_id] = (counts[vote.candidate_id] || 0) + 1;
+            if (vote.voter_id) uniqueVoters.add(vote.voter_id);
+          });
+
+          setRealResults(Object.entries(counts).map(([id, count]) => ({
+            candidateId: id,
+            votes: count
           })));
+
+          setVotedCount(uniqueVoters.size);
         }
-        if (turnoutData !== null) {
-          setVotedCount(Number(turnoutData));
+
+        if (realTotal !== null) {
+          setTotalVoters(realTotal);
         }
       } catch (err) {
         console.error('Error fetching results:', err);
@@ -286,38 +300,52 @@ export function ResultsPage() {
                   </div>
                 </div>
 
-                {/* Detailed Results */}
-                <div className="space-y-3">
+                {/* Simple Results Display */}
+                <div className="space-y-4">
                   {positionCandidates.map((candidate, index) => {
-                    const totalVotes = positionCandidates.reduce((sum, c) => sum + c.votes, 0);
-                    const percentage = ((candidate.votes / totalVotes) * 100).toFixed(1);
+                    const totalVotesForPosition = positionCandidates.reduce((sum, c) => sum + c.votes, 0);
+                    const percentage = totalVotesForPosition > 0
+                      ? ((candidate.votes / totalVotesForPosition) * 100).toFixed(1)
+                      : "0.0";
 
                     return (
                       <div
                         key={candidate.id}
-                        className={`p-4 rounded-lg ${index === 0 ? 'bg-primary/10 border-2 border-primary' : 'bg-muted'
+                        className={`p-5 rounded-xl transition-all ${index === 0
+                          ? 'bg-primary/5 border-2 border-primary/20 shadow-sm'
+                          : 'bg-muted border border-transparent'
                           }`}
                       >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3">
-                            {index === 0 && (
-                              <Trophy className="text-primary" size={20} />
-                            )}
-                            <span className="text-foreground">{candidate.name}</span>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-4">
+                            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-background border font-bold text-sm">
+                              {index + 1}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-foreground text-lg">{candidate.name}</p>
+                              {index === 0 && (
+                                <span className="text-[10px] bg-green-500 text-white px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">
+                                  Leading
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <div className="text-right">
-                            <p className="text-foreground">{candidate.votes} votes</p>
-                            <p className="text-sm text-muted-foreground">{percentage}%</p>
+                            <p className="text-2xl font-bold text-primary">{candidate.votes.toLocaleString()}</p>
+                            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Votes Obtained</p>
                           </div>
                         </div>
 
-                        {/* Progress Bar */}
-                        <div className="w-full bg-border rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full ${index === 0 ? 'bg-primary' : 'bg-accent'
-                              }`}
-                            style={{ width: `${percentage}%` }}
-                          />
+                        {/* Progress bar and Percentage */}
+                        <div className="flex items-center gap-4">
+                          <div className="flex-1 bg-border rounded-full h-2.5 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-1000 ease-out ${index === 0 ? 'bg-primary' : 'bg-slate-400'
+                                }`}
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                          <span className="text-sm font-bold text-foreground min-w-[45px]">{percentage}%</span>
                         </div>
                       </div>
                     );
@@ -327,35 +355,36 @@ export function ResultsPage() {
             ))}
           </div>
 
-          {/* Election Summary & Trends */}
+          {/* Detailed Stats */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
-            <Card>
-              <h3 className="mb-6 flex items-center gap-2">
-                <PieChartIcon className="text-primary" size={24} />
-                Election Summary
-              </h3>
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-                    <p className="text-sm text-blue-600 font-medium mb-1">Total Voters</p>
-                    <p className="text-3xl font-bold text-blue-900">{totalVoters.toLocaleString()}</p>
-                  </div>
-                  <div className="p-4 bg-green-50 rounded-xl border border-green-100">
-                    <p className="text-sm text-green-600 font-medium mb-1">Votes Cast</p>
-                    <p className="text-3xl font-bold text-green-900">{votedCount.toLocaleString()}</p>
-                  </div>
+            <Card className="bg-primary/5 border-primary/10">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <PieChartIcon className="text-primary" size={24} />
+                </div>
+                <h3>Participation Summary</h3>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex justify-between items-center p-4 bg-background rounded-lg border border-primary/5 shadow-sm">
+                  <span className="text-muted-foreground">Total Registered Students</span>
+                  <span className="text-xl font-bold">{totalVoters.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center p-4 bg-background rounded-lg border border-primary/5 shadow-sm">
+                  <span className="text-muted-foreground">Total Votes Processed</span>
+                  <span className="text-xl font-bold text-primary">{votedCount.toLocaleString()}</span>
                 </div>
 
-                <div className="p-6 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="flex justify-between items-end mb-2">
-                    <p className="font-medium text-slate-700">Voter Turnout</p>
-                    <p className="text-2xl font-bold text-slate-900">
+                <div className="mt-8 pt-6 border-t border-primary/10">
+                  <div className="flex justify-between items-end mb-3">
+                    <p className="font-bold text-foreground">Final Voter Turnout</p>
+                    <p className="text-3xl font-black text-primary">
                       {totalVoters > 0 ? ((votedCount / totalVoters) * 100).toFixed(1) : 0}%
                     </p>
                   </div>
-                  <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                  <div className="w-full bg-border rounded-full h-4 overflow-hidden p-1 shadow-inner">
                     <div
-                      className="h-full bg-primary transition-all duration-1000 ease-out"
+                      className="h-full bg-primary rounded-full transition-all duration-1000 ease-out shadow-lg"
                       style={{ width: `${totalVoters > 0 ? (votedCount / totalVoters) * 100 : 0}%` }}
                     />
                   </div>
@@ -363,48 +392,18 @@ export function ResultsPage() {
               </div>
             </Card>
 
-            <Card>
-              <h3 className="mb-6 flex items-center gap-2">
-                <TrendingUp className="text-primary" size={24} />
-                Voting Trends
-              </h3>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={turnoutData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                    <XAxis
-                      dataKey="time"
-                      tick={{ fill: '#64748b', fontSize: 12 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tick={{ fill: '#64748b', fontSize: 12 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#ffffff',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="votes"
-                      stroke="#1e3a8a"
-                      strokeWidth={3}
-                      dot={{ fill: '#1e3a8a', strokeWidth: 2, r: 4 }}
-                      activeDot={{ r: 6 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+            <Card className="flex flex-col justify-center items-center text-center space-y-4 border-dashed">
+              <ShieldCheck size={64} className="text-primary/20" />
+              <div className="space-y-2">
+                <h3 className="text-xl">Authenticated Results</h3>
+                <p className="text-muted-foreground text-sm max-w-[280px] mx-auto">
+                  These results are fetched directly from the secure votes table and calculated in real-time.
+                </p>
               </div>
-              <p className="text-center text-sm text-muted-foreground mt-4">
-                Cumulative votes cast over the 7-day election period
-              </p>
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-600 rounded-full text-sm font-bold">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                LIVE DATABASE CONNECTION
+              </div>
             </Card>
           </div>
         </div>

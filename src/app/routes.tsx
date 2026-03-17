@@ -12,6 +12,8 @@ import { AdminDashboard } from '@/app/pages/AdminDashboard';
 import { QuizPage } from '@/app/pages/QuizPage';
 import QAPage from '@/app/pages/QAPage';
 import { ProtectedRoute } from '@/app/components/ProtectedRoute';
+import { AdminLoginPage } from '@/app/pages/AdminLoginPage';
+import { AdminProfilePage } from '@/app/pages/AdminProfilePage';
 
 export const router = createBrowserRouter([
   {
@@ -105,5 +107,17 @@ export const router = createBrowserRouter([
         <AdminDashboard />
       </ProtectedRoute>
     ),
+  },
+  {
+    path: '/admin/profile',
+    element: (
+      <ProtectedRoute requireAdmin>
+        <AdminProfilePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/admin/login',
+    element: <AdminLoginPage />,
   },
 ]);

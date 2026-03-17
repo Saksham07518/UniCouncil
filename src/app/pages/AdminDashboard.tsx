@@ -1,30 +1,76 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sidebar } from '@/app/components/Sidebar';
 import { Card } from '@/app/components/Card';
 import { Button } from '@/app/components/Button';
 import { Input } from '@/app/components/Input';
-import { currentElection, candidates, results, positions } from '@/app/data/mockData';
-import { Users, Vote, TrendingUp, Settings, Calendar, UserPlus, BarChart } from 'lucide-react';
+import { supabase } from '@/app/lib/supabase';
+import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
+import { currentElection, candidates as mockCandidates, results as mockResults, positions } from '@/app/data/mockData';
+import { Users, Vote, TrendingUp, Settings, Calendar, UserPlus, BarChart, Loader2 } from 'lucide-react';
 
 export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'overview' | 'elections' | 'candidates' | 'monitoring'>('overview');
+  const [votedCount, setVotedCount] = useState<number>(0);
+  const [totalVoters, setTotalVoters] = useState<number>(currentElection.totalVoters);
+  const [realResults, setRealResults] = useState<{ candidateId: string, votes: number }[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const votingPercentage = ((currentElection.votedCount / currentElection.totalVoters) * 100).toFixed(1);
+  useEffect(() => {
+    async function fetchAdminStats() {
+      try {
+        setIsLoading(true);
 
-  // Calculate winners
+        const { data: votesData, error: votesError } = await supabase.from('votes').select('candidate_id, voter_id');
+        if (votesError) throw votesError;
+
+        // Fetch total registered
+        const { count } = await supabase
+          .from('registered_students')
+          .select('*', { count: 'exact', head: true });
+        if (count !== null) setTotalVoters(count);
+
+        if (votesData) {
+          const counts: Record<string, number> = {};
+          const uniqueVoters = new Set<string>();
+
+          votesData.forEach(vote => {
+            counts[vote.candidate_id] = (counts[vote.candidate_id] || 0) + 1;
+            if (vote.voter_id) uniqueVoters.add(vote.voter_id);
+          });
+
+          setRealResults(Object.entries(counts).map(([id, c]) => ({
+            candidateId: id,
+            votes: c
+          })));
+
+          setVotedCount(uniqueVoters.size);
+        }
+      } catch (err) {
+        console.error('Error fetching admin stats:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchAdminStats();
+  }, []);
+
+  const votingPercentage = totalVoters > 0 ? ((votedCount / totalVoters) * 100).toFixed(1) : "0.0";
+
+  // Calculate winners based on REAL results
   const winners = positions.map(position => {
-    const positionCandidates = candidates.filter(c => c.position === position);
-    const positionResults = positionCandidates.map(candidate => {
-      const result = results.find(r => r.candidateId === candidate.id);
+    const positionCandidates = mockCandidates.filter((c: any) => c.position === position);
+    const positionResults = positionCandidates.map((candidate: any) => {
+      const result = realResults.find(r => r.candidateId === candidate.id);
       return { ...candidate, votes: result?.votes || 0 };
-    }).sort((a, b) => b.votes - a.votes);
+    }).sort((a: any, b: any) => b.votes - a.votes);
     return { position, winner: positionResults[0] };
   });
 
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar isAdmin />
-      
+
       <div className="flex-1 p-8">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
@@ -37,41 +83,37 @@ export function AdminDashboard() {
           <div className="mb-6 flex gap-2 border-b border-border">
             <button
               onClick={() => setActiveTab('overview')}
-              className={`px-4 py-2 border-b-2 transition-colors ${
-                activeTab === 'overview'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
+              className={`px-4 py-2 border-b-2 transition-colors ${activeTab === 'overview'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
             >
               Overview
             </button>
             <button
               onClick={() => setActiveTab('elections')}
-              className={`px-4 py-2 border-b-2 transition-colors ${
-                activeTab === 'elections'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
+              className={`px-4 py-2 border-b-2 transition-colors ${activeTab === 'elections'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
             >
               Manage Elections
             </button>
             <button
               onClick={() => setActiveTab('candidates')}
-              className={`px-4 py-2 border-b-2 transition-colors ${
-                activeTab === 'candidates'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
+              className={`px-4 py-2 border-b-2 transition-colors ${activeTab === 'candidates'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
             >
               Manage Candidates
             </button>
             <button
               onClick={() => setActiveTab('monitoring')}
-              className={`px-4 py-2 border-b-2 transition-colors ${
-                activeTab === 'monitoring'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
+              className={`px-4 py-2 border-b-2 transition-colors ${activeTab === 'monitoring'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
             >
               Live Monitoring
             </button>
@@ -89,7 +131,7 @@ export function AdminDashboard() {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Total Voters</p>
-                      <p className="text-foreground">{currentElection.totalVoters}</p>
+                      <p className="text-foreground">{totalVoters}</p>
                     </div>
                   </div>
                 </Card>
@@ -101,7 +143,7 @@ export function AdminDashboard() {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Votes Cast</p>
-                      <p className="text-foreground">{currentElection.votedCount}</p>
+                      <p className="text-foreground">{votedCount}</p>
                     </div>
                   </div>
                 </Card>
@@ -125,36 +167,46 @@ export function AdminDashboard() {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Candidates</p>
-                      <p className="text-foreground">{candidates.length}</p>
+                      <p className="text-foreground">{mockCandidates.length}</p>
                     </div>
                   </div>
                 </Card>
               </div>
 
-              {/* Current Leaders */}
-              <Card>
-                <h3 className="mb-4">Current Leaders (Live Results)</h3>
-                <div className="space-y-3">
-                  {winners.map(({ position, winner }) => (
-                    <div key={position} className="flex items-center justify-between p-4 bg-muted rounded-lg">
-                      <div className="flex items-center gap-4">
-                        <img
-                          src={winner.photo}
-                          alt={winner.name}
-                          className="w-12 h-12 rounded-lg object-cover"
-                        />
-                        <div>
-                          <p className="text-foreground">{winner.name}</p>
-                          <p className="text-sm text-muted-foreground">{position}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-foreground">{results.find(r => r.candidateId === winner.id)?.votes || 0} votes</p>
-                      </div>
-                    </div>
-                  ))}
+              {isLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
                 </div>
-              </Card>
+              ) : (
+                <>
+                  {/* Current Leaders */}
+                  <Card>
+                    <h3 className="mb-4">Current Leaders (Live Results)</h3>
+                    <div className="space-y-3">
+                      {winners.map(({ position, winner }: any) => (
+                        <div key={position} className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                          <div className="flex items-center gap-4">
+                            <ImageWithFallback
+                              src={winner.photo}
+                              alt={winner.name}
+                              className="w-12 h-12 rounded-lg object-cover"
+                            />
+                            <div>
+                              <p className="text-foreground">{winner.name}</p>
+                              <p className="text-sm text-muted-foreground">{position}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-foreground">
+                              {realResults.find((r: any) => r.candidateId === winner.id)?.votes || 0} votes
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                </>
+              )}
 
               {/* Recent Activity */}
               <Card>
@@ -268,13 +320,13 @@ export function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {candidates.map((candidate) => {
-                        const candidateVotes = results.find(r => r.candidateId === candidate.id)?.votes || 0;
+                      {mockCandidates.map((candidate: any) => {
+                        const candidateVotes = realResults.find((r: any) => r.candidateId === candidate.id)?.votes || 0;
                         return (
                           <tr key={candidate.id} className="border-b border-border last:border-0">
                             <td className="py-3 px-4">
                               <div className="flex items-center gap-3">
-                                <img
+                                <ImageWithFallback
                                   src={candidate.photo}
                                   alt={candidate.name}
                                   className="w-10 h-10 rounded-lg object-cover"
@@ -353,7 +405,7 @@ export function AdminDashboard() {
                     </div>
                     <div className="p-4 bg-muted rounded-lg">
                       <p className="text-sm text-muted-foreground">Remaining voters</p>
-                      <p className="text-foreground">{currentElection.totalVoters - currentElection.votedCount}</p>
+                      <p className="text-foreground">{totalVoters - votedCount}</p>
                     </div>
                   </div>
                 </Card>

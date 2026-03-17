@@ -26,6 +26,7 @@ export function Sidebar({ isAdmin = false }: SidebarProps) {
 
   const adminNavItems = [
     { path: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/admin/profile', label: 'Profile', icon: User },
   ];
 
   const navItems = isAdmin ? adminNavItems : studentNavItems;
