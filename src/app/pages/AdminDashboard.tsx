@@ -9,9 +9,10 @@ import { currentElection, candidates as mockCandidates, results as mockResults, 
 import { Users, Vote, TrendingUp, Settings, Calendar, UserPlus, BarChart, Loader2 } from 'lucide-react';
 
 export function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'elections' | 'candidates' | 'monitoring'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'elections' | 'candidates' | 'monitoring' | 'voters'>('overview');
   const [votedCount, setVotedCount] = useState<number>(0);
   const [totalVoters, setTotalVoters] = useState<number>(currentElection.totalVoters);
+  const [votersList, setVotersList] = useState<any[]>([]);
   const [realResults, setRealResults] = useState<{ candidateId: string, votes: number }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -23,11 +24,13 @@ export function AdminDashboard() {
         const { data: votesData, error: votesError } = await supabase.from('votes').select('candidate_id, voter_id');
         if (votesError) throw votesError;
 
-        // Fetch total registered
-        const { count } = await supabase
+        // Fetch total registered and their details
+        const { count, data: studentsData } = await supabase
           .from('registered_students')
-          .select('*', { count: 'exact', head: true });
+          .select('name, roll_number, phone', { count: 'exact' })
+          .order('name');
         if (count !== null) setTotalVoters(count);
+        if (studentsData) setVotersList(studentsData);
 
         if (votesData) {
           const counts: Record<string, number> = {};
@@ -116,6 +119,15 @@ export function AdminDashboard() {
                 }`}
             >
               Live Monitoring
+            </button>
+            <button
+              onClick={() => setActiveTab('voters')}
+              className={`px-4 py-2 border-b-2 transition-colors ${activeTab === 'voters'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+            >
+              Voters List
             </button>
           </div>
 
@@ -351,6 +363,44 @@ export function AdminDashboard() {
                       })}
                     </tbody>
                   </table>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {/* Voters List Tab */}
+          {activeTab === 'voters' && (
+            <div className="space-y-6">
+              <Card>
+                <div className="flex items-center justify-between mb-6">
+                  <h3>All Registered Voters</h3>
+                  <div className="text-sm text-muted-foreground">Total: {votersList.length}</div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-3 px-4 text-muted-foreground font-medium">Name</th>
+                        <th className="text-left py-3 px-4 text-muted-foreground font-medium">Roll Number</th>
+                        <th className="text-left py-3 px-4 text-muted-foreground font-medium">Phone Number</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {votersList.map((voter: any, idx: number) => (
+                        <tr key={idx} className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors">
+                          <td className="py-3 px-4 text-foreground">{voter.name}</td>
+                          <td className="py-3 px-4 text-foreground">{voter.roll_number}</td>
+                          <td className="py-3 px-4 text-foreground">{voter.phone}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {votersList.length === 0 && !isLoading && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No voters found.
+                    </div>
+                  )}
                 </div>
               </Card>
             </div>
