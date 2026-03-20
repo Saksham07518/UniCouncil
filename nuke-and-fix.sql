@@ -59,12 +59,13 @@ BEGIN
    WHERE regexp_replace(COALESCE(r.phone, ''), '\D', '', 'g') LIKE '%' || right(clean_auth_phone, 10)
    LIMIT 1;
 
-  INSERT INTO public.profiles (id, name, phone, roll_number)
+  INSERT INTO public.profiles (id, name, phone, roll_number, role)
   VALUES (
     NEW.id,
-    COALESCE(reg_name, 'Unknown Student'),
+    CASE WHEN NEW.email IS NOT NULL THEN 'Admin User' ELSE COALESCE(reg_name, 'Unknown Student') END,
     NEW.phone,
-    reg_roll
+    CASE WHEN NEW.email IS NOT NULL THEN 'ADMIN-001' ELSE reg_roll END,
+    CASE WHEN NEW.email IS NOT NULL THEN 'admin' ELSE 'student' END
   );
 
   RETURN NEW;
