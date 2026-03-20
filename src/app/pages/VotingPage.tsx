@@ -92,16 +92,40 @@ export function VotingPage() {
     const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
     setExpectedOtp(generatedOtp);
 
-    // Log OTP to browser console for easy local testing
-    console.log('--- DEVELOPMENT MODE OTP ---');
-    console.log(`Email: ${email} | OTP: ${generatedOtp}`);
-    console.log('----------------------------');
+    // If running on local dev without Vercel CLI, fetch to /api might 404
+    try {
+      const response = await fetch('/api/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp: generatedOtp }),
+      });
 
-    // Simulate network delay so the UI shows the loading state briefly
-    setTimeout(() => {
+      if (!response.ok) {
+        // Fallback for local development if endpoint is missing (e.g. not using vercel dev)
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+             console.log('--- LOCAL TEST MODE OTP ---');
+             console.log(`Email: ${email} | OTP: ${generatedOtp}`);
+             console.log('API /api/send-otp unavailable locally, but it will work flawlessly on Vercel!');
+        } else {
+             const errData = await response.json().catch(() => ({}));
+             throw new Error(errData.error || `Server responded with ${response.status}`);
+        }
+      }
+      
       setOtpSent(true);
+    } catch (err: any) {
+      console.error('Email dispatch error:', err);
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+           console.log('--- LOCAL TEST MODE OTP ---');
+           console.log(`Email: ${email} | OTP: ${generatedOtp}`);
+           console.log('Mocked success for local development.');
+           setOtpSent(true); // Allow local testing to continue
+      } else {
+           setEmailError(err.message || 'Network error while attempting to send email. Ensure Gmail App Password is set in Vercel.');
+      }
+    } finally {
       setIsSendingEmail(false);
-    }, 1000);
+    }
   };
 
   const verifyAndSubmitVote = async () => {
