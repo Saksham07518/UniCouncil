@@ -112,10 +112,11 @@ export function AdminDashboard() {
     }
   };
 
+  const searchLower = searchQuery.toLowerCase();
   const filteredVoters = votersList.filter((voter: any) => 
-    voter.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    voter.roll_number?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    voter.phone?.includes(searchQuery)
+    (voter.name || '').toLowerCase().includes(searchLower) || 
+    (voter.roll_number || '').toLowerCase().includes(searchLower) || 
+    (voter.phone || '').toLowerCase().includes(searchLower)
   );
 
   // Calculate winners based on REAL results
