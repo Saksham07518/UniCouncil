@@ -12,6 +12,7 @@ export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'overview' | 'elections' | 'candidates' | 'monitoring' | 'voters'>('overview');
   const [votedCount, setVotedCount] = useState<number>(0);
   const [totalVoters, setTotalVoters] = useState<number>(currentElection.totalVoters);
+  const [searchQuery, setSearchQuery] = useState('');
   const [votersList, setVotersList] = useState<any[]>([]);
   const [realResults, setRealResults] = useState<{ candidateId: string, votes: number }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -24,12 +25,18 @@ export function AdminDashboard() {
         const { data: votesData, error: votesError } = await supabase.from('votes').select('candidate_id, voter_id');
         if (votesError) throw votesError;
 
-        // Fetch total registered and their details
-        const { count, data: studentsData } = await supabase
+        // Fetch total eligible registered count
+        const { count } = await supabase
           .from('registered_students')
-          .select('name, roll_number, phone', { count: 'exact' })
-          .order('name');
+          .select('*', { count: 'exact', head: true });
         if (count !== null) setTotalVoters(count);
+
+        // Fetch actual user profiles for the voters list
+        const { data: studentsData } = await supabase
+          .from('profiles')
+          .select('id, name, roll_number, phone, has_voted')
+          .neq('role', 'admin')
+          .order('name');
         if (studentsData) setVotersList(studentsData);
 
         if (votesData) {
@@ -59,6 +66,57 @@ export function AdminDashboard() {
   }, []);
 
   const votingPercentage = totalVoters > 0 ? ((votedCount / totalVoters) * 100).toFixed(1) : "0.0";
+
+  const handleRevote = async (voterId: string) => {
+    if (!window.confirm("Are you sure you want to let this user revote? Their previous votes will be deleted forever.")) return;
+    
+    setIsLoading(true);
+    try {
+      // 1. Delete all votes by this user
+      const { error: deleteError } = await supabase
+        .from('votes')
+        .delete()
+        .eq('voter_id', voterId);
+      
+      if (deleteError) throw deleteError;
+
+      // 2. Set has_voted to false in profiles
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ has_voted: false })
+        .eq('id', voterId);
+
+      if (updateError) throw updateError;
+
+      // 3. Update local state
+      setVotersList(prev => prev.map(v => v.id === voterId ? { ...v, has_voted: false } : v));
+      setVotedCount(prev => Math.max(0, prev - 1));
+      
+      // Refresh the real results
+      const { data: votesData } = await supabase.from('votes').select('candidate_id, voter_id');
+      if (votesData) {
+        const counts: Record<string, number> = {};
+        votesData.forEach(vote => {
+          counts[vote.candidate_id] = (counts[vote.candidate_id] || 0) + 1;
+        });
+        setRealResults(Object.entries(counts).map(([id, c]) => ({
+          candidateId: id,
+          votes: c
+        })));
+      }
+    } catch (err: any) {
+      console.error('Error allowing revote:', err);
+      alert('Failed to process revote. Ensure you have run the update-roles-votes.sql script. Error: ' + err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const filteredVoters = votersList.filter((voter: any) => 
+    voter.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    voter.roll_number?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    voter.phone?.includes(searchQuery)
+  );
 
   // Calculate winners based on REAL results
   const winners = positions.map(position => {
@@ -372,9 +430,18 @@ export function AdminDashboard() {
           {activeTab === 'voters' && (
             <div className="space-y-6">
               <Card>
-                <div className="flex items-center justify-between mb-6">
-                  <h3>All Registered Voters</h3>
-                  <div className="text-sm text-muted-foreground">Total: {votersList.length}</div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+                  <div>
+                    <h3>Voters List</h3>
+                    <div className="text-sm text-muted-foreground">Total Active Users: {votersList.length}</div>
+                  </div>
+                  <Input 
+                    type="text" 
+                    placeholder="Search by name, roll no, or phone..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full sm:w-64"
+                  />
                 </div>
 
                 <div className="overflow-x-auto">
@@ -384,21 +451,39 @@ export function AdminDashboard() {
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Name</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Roll Number</th>
                         <th className="text-left py-3 px-4 text-muted-foreground font-medium">Phone Number</th>
+                        <th className="text-left py-3 px-4 text-muted-foreground font-medium">Status</th>
+                        <th className="text-right py-3 px-4 text-muted-foreground font-medium">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {votersList.map((voter: any, idx: number) => (
-                        <tr key={idx} className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors">
-                          <td className="py-3 px-4 text-foreground">{voter.name}</td>
+                      {filteredVoters.map((voter: any) => (
+                        <tr key={voter.id} className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors">
+                          <td className="py-3 px-4 text-foreground font-medium">{voter.name}</td>
                           <td className="py-3 px-4 text-foreground">{voter.roll_number}</td>
                           <td className="py-3 px-4 text-foreground">{voter.phone}</td>
+                          <td className="py-3 px-4">
+                            {voter.has_voted ? (
+                              <span className="inline-block px-2 py-1 bg-primary/10 text-primary rounded-md text-xs font-semibold">Voted</span>
+                            ) : (
+                              <span className="inline-block px-2 py-1 bg-muted text-muted-foreground rounded-md text-xs font-semibold">Pending</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            {voter.has_voted ? (
+                              <Button variant="outline" size="sm" onClick={() => handleRevote(voter.id)} disabled={isLoading}>
+                                Revote
+                              </Button>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  {votersList.length === 0 && !isLoading && (
+                  {filteredVoters.length === 0 && !isLoading && (
                     <div className="text-center py-8 text-muted-foreground">
-                      No voters found.
+                      No voters found matching your search.
                     </div>
                   )}
                 </div>
