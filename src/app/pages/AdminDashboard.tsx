@@ -6,7 +6,7 @@ import { Input } from '@/app/components/Input';
 import { supabase } from '@/app/lib/supabase';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import { currentElection, candidates as mockCandidates, results as mockResults, positions } from '@/app/data/mockData';
-import { Users, Vote, TrendingUp, Settings, Calendar, UserPlus, BarChart, Loader2 } from 'lucide-react';
+import { Users, Vote, TrendingUp, Settings, Calendar, UserPlus, BarChart, Loader2, Edit, X } from 'lucide-react';
 
 export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'overview' | 'elections' | 'candidates' | 'monitoring' | 'voters'>('overview');
@@ -16,6 +16,19 @@ export function AdminDashboard() {
   const [votersList, setVotersList] = useState<any[]>([]);
   const [realResults, setRealResults] = useState<{ candidateId: string, votes: number }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Election editing state
+  const [electionData, setElectionData] = useState({
+    name: currentElection.name,
+    status: currentElection.status,
+    startDate: currentElection.startDate,
+    endDate: currentElection.endDate,
+  });
+  const [isEditingElection, setIsEditingElection] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editStatus, setEditStatus] = useState<'upcoming' | 'ongoing' | 'completed'>('ongoing');
+  const [editStartDate, setEditStartDate] = useState('');
+  const [editEndDate, setEditEndDate] = useState('');
 
   useEffect(() => {
     async function fetchAdminStats() {
@@ -110,6 +123,35 @@ export function AdminDashboard() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Election editing handlers
+  const formatDateForInput = (date: Date) => date.toISOString().split('T')[0];
+
+  const handleEditElection = () => {
+    setEditName(electionData.name);
+    setEditStatus(electionData.status);
+    setEditStartDate(formatDateForInput(electionData.startDate));
+    setEditEndDate(formatDateForInput(electionData.endDate));
+    setIsEditingElection(true);
+  };
+
+  const handleSaveElection = () => {
+    if (!editName.trim()) return alert('Election name is required.');
+    if (!editStartDate || !editEndDate) return alert('Start and end dates are required.');
+    if (new Date(editEndDate) <= new Date(editStartDate)) return alert('End date must be after start date.');
+
+    setElectionData({
+      name: editName.trim(),
+      status: editStatus,
+      startDate: new Date(editStartDate),
+      endDate: new Date(editEndDate),
+    });
+    setIsEditingElection(false);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingElection(false);
   };
 
   const searchLower = searchQuery.toLowerCase();
@@ -307,36 +349,110 @@ export function AdminDashboard() {
           {activeTab === 'elections' && (
             <div className="space-y-6">
               <Card>
-                <div className="flex items-center justify-between mb-6">
-                  <h3>Current Election</h3>
-                  <Button variant="outline">
-                    <Settings size={16} className="mr-2" />
-                    Edit Election
-                  </Button>
-                </div>
+                {isEditingElection ? (
+                  /* ── Edit Mode ── */
+                  <>
+                    <div className="flex items-center justify-between mb-6">
+                      <h3>Edit Election</h3>
+                      <button
+                        onClick={handleCancelEdit}
+                        className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        title="Cancel"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
 
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Election Name</p>
-                      <p className="text-foreground">{currentElection.name}</p>
+                    <div className="space-y-4">
+                      <Input
+                        label="Election Name"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder="e.g., Student Council Election 2026"
+                        fullWidth
+                      />
+
+                      <div>
+                        <label className="block mb-2 text-foreground">Status</label>
+                        <select
+                          value={editStatus}
+                          onChange={(e) => setEditStatus(e.target.value as 'upcoming' | 'ongoing' | 'completed')}
+                          className="w-full px-4 py-2.5 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                          <option value="upcoming">Upcoming</option>
+                          <option value="ongoing">Ongoing</option>
+                          <option value="completed">Completed</option>
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <Input
+                          label="Start Date"
+                          type="date"
+                          value={editStartDate}
+                          onChange={(e) => setEditStartDate(e.target.value)}
+                          fullWidth
+                        />
+                        <Input
+                          label="End Date"
+                          type="date"
+                          value={editEndDate}
+                          onChange={(e) => setEditEndDate(e.target.value)}
+                          fullWidth
+                        />
+                      </div>
+
+                      <div className="flex gap-3 pt-2">
+                        <Button onClick={handleSaveElection}>
+                          Save Changes
+                        </Button>
+                        <Button variant="outline" onClick={handleCancelEdit}>
+                          Cancel
+                        </Button>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Status</p>
-                      <span className="inline-block px-3 py-1 bg-accent text-accent-foreground rounded-full text-sm">
-                        {currentElection.status}
-                      </span>
+                  </>
+                ) : (
+                  /* ── View Mode ── */
+                  <>
+                    <div className="flex items-center justify-between mb-6">
+                      <h3>Current Election</h3>
+                      <Button variant="outline" onClick={handleEditElection}>
+                        <Edit size={16} className="mr-2" />
+                        Edit Election
+                      </Button>
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Start Date</p>
-                      <p className="text-foreground">{currentElection.startDate.toLocaleDateString()}</p>
+
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-sm text-muted-foreground mb-1">Election Name</p>
+                          <p className="text-foreground">{electionData.name}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground mb-1">Status</p>
+                          <span className={`inline-block px-3 py-1 rounded-full text-sm capitalize ${
+                            electionData.status === 'ongoing'
+                              ? 'bg-accent text-accent-foreground'
+                              : electionData.status === 'upcoming'
+                              ? 'bg-primary/10 text-primary'
+                              : 'bg-muted text-muted-foreground'
+                          }`}>
+                            {electionData.status}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground mb-1">Start Date</p>
+                          <p className="text-foreground">{electionData.startDate.toLocaleDateString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground mb-1">End Date</p>
+                          <p className="text-foreground">{electionData.endDate.toLocaleDateString()}</p>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">End Date</p>
-                      <p className="text-foreground">{currentElection.endDate.toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                </div>
+                  </>
+                )}
               </Card>
 
               <Card>
