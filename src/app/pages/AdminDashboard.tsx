@@ -5,8 +5,8 @@ import { Button } from '@/app/components/Button';
 import { Input } from '@/app/components/Input';
 import { supabase } from '@/app/lib/supabase';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
-import { currentElection, candidates as mockCandidates, results as mockResults, positions } from '@/app/data/mockData';
-import { Users, Vote, TrendingUp, Settings, Calendar, UserPlus, BarChart, Loader2, Edit, X } from 'lucide-react';
+import { currentElection, candidates as mockCandidates, results as mockResults, positions, Candidate } from '@/app/data/mockData';
+import { Users, Vote, TrendingUp, Settings, Calendar, UserPlus, BarChart, Loader2, Edit, X, Trash2, Save, Check } from 'lucide-react';
 
 export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'overview' | 'elections' | 'candidates' | 'monitoring' | 'voters'>('overview');
@@ -29,6 +29,13 @@ export function AdminDashboard() {
   const [editStatus, setEditStatus] = useState<'upcoming' | 'ongoing' | 'completed'>('ongoing');
   const [editStartDate, setEditStartDate] = useState('');
   const [editEndDate, setEditEndDate] = useState('');
+
+  // Candidate management state
+  const [candidatesList, setCandidatesList] = useState<Candidate[]>([...mockCandidates]);
+  const [editingCandidateId, setEditingCandidateId] = useState<string | null>(null);
+  const [editCandidateName, setEditCandidateName] = useState('');
+  const [editCandidatePosition, setEditCandidatePosition] = useState('');
+  const [editCandidateEmail, setEditCandidateEmail] = useState('');
 
   useEffect(() => {
     async function fetchAdminStats() {
@@ -152,6 +159,36 @@ export function AdminDashboard() {
 
   const handleCancelEdit = () => {
     setIsEditingElection(false);
+  };
+
+  // Candidate editing handlers
+  const handleEditCandidate = (candidate: Candidate) => {
+    setEditingCandidateId(candidate.id);
+    setEditCandidateName(candidate.name);
+    setEditCandidatePosition(candidate.position);
+    setEditCandidateEmail(candidate.email);
+  };
+
+  const handleSaveCandidate = () => {
+    if (!editCandidateName.trim()) return alert('Candidate name is required.');
+    if (!editCandidatePosition) return alert('Position is required.');
+    if (!editCandidateEmail.trim()) return alert('Email is required.');
+
+    setCandidatesList(prev => prev.map(c =>
+      c.id === editingCandidateId
+        ? { ...c, name: editCandidateName.trim(), position: editCandidatePosition, email: editCandidateEmail.trim() }
+        : c
+    ));
+    setEditingCandidateId(null);
+  };
+
+  const handleCancelCandidateEdit = () => {
+    setEditingCandidateId(null);
+  };
+
+  const handleRemoveCandidate = (candidateId: string, candidateName: string) => {
+    if (!window.confirm(`Are you sure you want to remove ${candidateName}? This action cannot be undone.`)) return;
+    setCandidatesList(prev => prev.filter(c => c.id !== candidateId));
   };
 
   const searchLower = searchQuery.toLowerCase();
@@ -489,7 +526,7 @@ export function AdminDashboard() {
             <div className="space-y-6">
               <Card>
                 <div className="flex items-center justify-between mb-6">
-                  <h3>All Candidates</h3>
+                  <h3>All Candidates ({candidatesList.length})</h3>
                   <Button>
                     <UserPlus size={16} className="mr-2" />
                     Add Candidate
@@ -507,10 +544,58 @@ export function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {mockCandidates.map((candidate: any) => {
+                      {candidatesList.map((candidate) => {
                         const candidateVotes = realResults.find((r: any) => r.candidateId === candidate.id)?.votes || 0;
+                        const isEditing = editingCandidateId === candidate.id;
+
+                        if (isEditing) {
+                          return (
+                            <tr key={candidate.id} className="border-b border-border last:border-0 bg-muted/30">
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-3">
+                                  <ImageWithFallback
+                                    src={candidate.photo}
+                                    alt={candidate.name}
+                                    className="w-10 h-10 rounded-lg object-cover"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={editCandidateName}
+                                    onChange={(e) => setEditCandidateName(e.target.value)}
+                                    className="px-3 py-1.5 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring text-sm w-full max-w-[180px]"
+                                    placeholder="Candidate name"
+                                  />
+                                </div>
+                              </td>
+                              <td className="py-3 px-4">
+                                <select
+                                  value={editCandidatePosition}
+                                  onChange={(e) => setEditCandidatePosition(e.target.value)}
+                                  className="px-3 py-1.5 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                                >
+                                  {positions.map(pos => (
+                                    <option key={pos} value={pos}>{pos}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="py-3 px-4 text-foreground">{candidateVotes}</td>
+                              <td className="py-3 px-4">
+                                <div className="flex gap-2">
+                                  <Button variant="primary" className="text-sm py-1 px-3" onClick={handleSaveCandidate}>
+                                    <Check size={14} className="mr-1" />
+                                    Save
+                                  </Button>
+                                  <Button variant="outline" className="text-sm py-1 px-3" onClick={handleCancelCandidateEdit}>
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        }
+
                         return (
-                          <tr key={candidate.id} className="border-b border-border last:border-0">
+                          <tr key={candidate.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                             <td className="py-3 px-4">
                               <div className="flex items-center gap-3">
                                 <ImageWithFallback
@@ -525,10 +610,12 @@ export function AdminDashboard() {
                             <td className="py-3 px-4 text-foreground">{candidateVotes}</td>
                             <td className="py-3 px-4">
                               <div className="flex gap-2">
-                                <Button variant="outline" className="text-sm py-1 px-3">
+                                <Button variant="outline" className="text-sm py-1 px-3" onClick={() => handleEditCandidate(candidate)}>
+                                  <Edit size={14} className="mr-1" />
                                   Edit
                                 </Button>
-                                <Button variant="outline" className="text-sm py-1 px-3 text-destructive">
+                                <Button variant="outline" className="text-sm py-1 px-3 text-destructive" onClick={() => handleRemoveCandidate(candidate.id, candidate.name)}>
+                                  <Trash2 size={14} className="mr-1" />
                                   Remove
                                 </Button>
                               </div>
@@ -538,6 +625,11 @@ export function AdminDashboard() {
                       })}
                     </tbody>
                   </table>
+                  {candidatesList.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No candidates found. Add a candidate to get started.
+                    </div>
+                  )}
                 </div>
               </Card>
             </div>
