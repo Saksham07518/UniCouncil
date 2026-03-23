@@ -16,6 +16,11 @@ export function AdminDashboard() {
   const [votersList, setVotersList] = useState<any[]>([]);
   const [realResults, setRealResults] = useState<{ candidateId: string, votes: number }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [hourlyVotes, setHourlyVotes] = useState<{ hour: string, votes: number }[]>([]);
+  const [peakHour, setPeakHour] = useState<string>('N/A');
+  const [totalVotesToday, setTotalVotesToday] = useState(0);
+  const [firstVoteTime, setFirstVoteTime] = useState<Date | null>(null);
+  const [lastVoteTime, setLastVoteTime] = useState<Date | null>(null);
 
   // Election editing state
   const [electionData, setElectionData] = useState({
@@ -42,7 +47,7 @@ export function AdminDashboard() {
       try {
         setIsLoading(true);
 
-        const { data: votesData, error: votesError } = await supabase.from('votes').select('candidate_id, voter_id');
+        const { data: votesData, error: votesError } = await supabase.from('votes').select('candidate_id, voter_id, created_at');
         if (votesError) throw votesError;
 
         // Fetch total eligible registered count
@@ -62,10 +67,24 @@ export function AdminDashboard() {
         if (votesData) {
           const counts: Record<string, number> = {};
           const uniqueVoters = new Set<string>();
+          const hourMap: Record<string, number> = {};
+          const timestamps: Date[] = [];
 
           votesData.forEach(vote => {
             counts[vote.candidate_id] = (counts[vote.candidate_id] || 0) + 1;
             if (vote.voter_id) uniqueVoters.add(vote.voter_id);
+
+            // Process timestamps for hourly breakdown
+            if (vote.created_at) {
+              const voteDate = new Date(vote.created_at);
+              timestamps.push(voteDate);
+              const hourNum = voteDate.getHours();
+              const hourLabel = hourNum === 0 ? '12 AM' : hourNum < 12 ? `${hourNum} AM` : hourNum === 12 ? '12 PM' : `${hourNum - 12} PM`;
+              const nextHourNum = (hourNum + 1) % 24;
+              const nextHourLabel = nextHourNum === 0 ? '12 AM' : nextHourNum < 12 ? `${nextHourNum} AM` : nextHourNum === 12 ? '12 PM' : `${nextHourNum - 12} PM`;
+              const key = `${hourLabel} - ${nextHourLabel}`;
+              hourMap[key] = (hourMap[key] || 0) + 1;
+            }
           });
 
           setRealResults(Object.entries(counts).map(([id, c]) => ({
@@ -74,6 +93,33 @@ export function AdminDashboard() {
           })));
 
           setVotedCount(uniqueVoters.size);
+
+          // Build sorted hourly data
+          const hourlyData = Object.entries(hourMap)
+            .map(([hour, v]) => ({ hour, votes: v }))
+            .sort((a, b) => b.votes - a.votes);
+          setHourlyVotes(hourlyData);
+
+          // Set peak hour
+          if (hourlyData.length > 0) {
+            setPeakHour(hourlyData[0].hour);
+          }
+
+          // Set timestamps for today
+          const today = new Date();
+          const todayVotes = timestamps.filter(t =>
+            t.getDate() === today.getDate() &&
+            t.getMonth() === today.getMonth() &&
+            t.getFullYear() === today.getFullYear()
+          );
+          setTotalVotesToday(todayVotes.length);
+
+          // First and last vote times
+          if (timestamps.length > 0) {
+            timestamps.sort((a, b) => a.getTime() - b.getTime());
+            setFirstVoteTime(timestamps[0]);
+            setLastVoteTime(timestamps[timestamps.length - 1]);
+          }
         }
       } catch (err) {
         console.error('Error fetching admin stats:', err);
@@ -703,34 +749,65 @@ export function AdminDashboard() {
           {/* Live Monitoring Tab */}
           {activeTab === 'monitoring' && (
             <div className="space-y-6">
+              {/* Key Metrics Row */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card>
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground mb-1">Total Votes Cast</p>
+                    <p className="text-2xl font-bold text-foreground">{votedCount}</p>
+                  </div>
+                </Card>
+                <Card>
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground mb-1">Voter Turnout</p>
+                    <p className="text-2xl font-bold text-primary">{votingPercentage}%</p>
+                  </div>
+                </Card>
+                <Card>
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground mb-1">Votes Today</p>
+                    <p className="text-2xl font-bold text-foreground">{totalVotesToday}</p>
+                  </div>
+                </Card>
+                <Card>
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground mb-1">Remaining Voters</p>
+                    <p className="text-2xl font-bold text-foreground">{totalVoters - votedCount}</p>
+                  </div>
+                </Card>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card>
                   <div className="flex items-center gap-3 mb-4">
                     <BarChart className="text-primary" size={20} />
                     <h3>Voter Turnout by Hour</h3>
                   </div>
-                  <div className="space-y-3">
-                    {[
-                      { hour: '9 AM - 10 AM', votes: 234 },
-                      { hour: '10 AM - 11 AM', votes: 312 },
-                      { hour: '11 AM - 12 PM', votes: 389 },
-                      { hour: '12 PM - 1 PM', votes: 456 },
-                      { hour: '1 PM - 2 PM', votes: 432 },
-                    ].map((data, i) => (
-                      <div key={i}>
-                        <div className="flex justify-between text-sm mb-1">
-                          <span className="text-muted-foreground">{data.hour}</span>
-                          <span className="text-foreground">{data.votes} votes</span>
-                        </div>
-                        <div className="w-full bg-border rounded-full h-2">
-                          <div
-                            className="bg-primary h-2 rounded-full"
-                            style={{ width: `${(data.votes / 500) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  {hourlyVotes.length > 0 ? (
+                    <div className="space-y-3">
+                      {hourlyVotes.map((data, i) => {
+                        const maxVotes = Math.max(...hourlyVotes.map(h => h.votes));
+                        return (
+                          <div key={i}>
+                            <div className="flex justify-between text-sm mb-1">
+                              <span className="text-muted-foreground">{data.hour}</span>
+                              <span className="text-foreground">{data.votes} votes</span>
+                            </div>
+                            <div className="w-full bg-border rounded-full h-2">
+                              <div
+                                className={`h-2 rounded-full transition-all ${i === 0 ? 'bg-accent' : 'bg-primary'}`}
+                                style={{ width: `${(data.votes / maxVotes) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No voting data available yet.
+                    </div>
+                  )}
                 </Card>
 
                 <Card>
@@ -740,20 +817,67 @@ export function AdminDashboard() {
                   </div>
                   <div className="space-y-4">
                     <div className="p-4 bg-muted rounded-lg">
-                      <p className="text-sm text-muted-foreground">Average voting time</p>
-                      <p className="text-foreground">2 minutes 34 seconds</p>
+                      <p className="text-sm text-muted-foreground">Peak Voting Hour</p>
+                      <p className="text-foreground font-medium">{peakHour}</p>
                     </div>
                     <div className="p-4 bg-muted rounded-lg">
-                      <p className="text-sm text-muted-foreground">Peak voting hour</p>
-                      <p className="text-foreground">12 PM - 1 PM</p>
+                      <p className="text-sm text-muted-foreground">First Vote Cast</p>
+                      <p className="text-foreground font-medium">
+                        {firstVoteTime ? firstVoteTime.toLocaleString() : 'No votes yet'}
+                      </p>
                     </div>
                     <div className="p-4 bg-muted rounded-lg">
-                      <p className="text-sm text-muted-foreground">Remaining voters</p>
-                      <p className="text-foreground">{totalVoters - votedCount}</p>
+                      <p className="text-sm text-muted-foreground">Latest Vote Cast</p>
+                      <p className="text-foreground font-medium">
+                        {lastVoteTime ? lastVoteTime.toLocaleString() : 'No votes yet'}
+                      </p>
+                    </div>
+                    <div className="p-4 bg-muted rounded-lg">
+                      <p className="text-sm text-muted-foreground">Remaining Voters</p>
+                      <p className="text-foreground font-medium">{totalVoters - votedCount}</p>
                     </div>
                   </div>
                 </Card>
               </div>
+
+              {/* Results by Position */}
+              <Card>
+                <h3 className="mb-4">Votes by Position</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {positions.map(position => {
+                    const positionCandidates = candidatesList
+                      .filter(c => c.position === position)
+                      .map(c => ({
+                        ...c,
+                        votes: realResults.find(r => r.candidateId === c.id)?.votes || 0
+                      }))
+                      .sort((a, b) => b.votes - a.votes);
+                    const maxVotes = Math.max(...positionCandidates.map(c => c.votes), 1);
+
+                    return (
+                      <div key={position}>
+                        <h4 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">{position}</h4>
+                        <div className="space-y-2">
+                          {positionCandidates.map((c, i) => (
+                            <div key={c.id}>
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="text-foreground">{c.name}</span>
+                                <span className="text-muted-foreground">{c.votes} votes</span>
+                              </div>
+                              <div className="w-full bg-border rounded-full h-2">
+                                <div
+                                  className={`h-2 rounded-full ${i === 0 ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+                                  style={{ width: `${(c.votes / maxVotes) * 100}%` }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
 
               <Card>
                 <h3 className="mb-4">System Health</h3>
@@ -773,10 +897,9 @@ export function AdminDashboard() {
                     </div>
                   </div>
                   <div className="p-4 bg-muted rounded-lg">
-                    <p className="text-sm text-muted-foreground mb-2">API Response</p>
+                    <p className="text-sm text-muted-foreground mb-2">Total Positions</p>
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-green-500 rounded-full" />
-                      <span className="text-foreground">45ms</span>
+                      <span className="text-foreground font-medium">{positions.length}</span>
                     </div>
                   </div>
                 </div>
