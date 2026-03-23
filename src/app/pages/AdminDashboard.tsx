@@ -6,7 +6,7 @@ import { Input } from '@/app/components/Input';
 import { supabase } from '@/app/lib/supabase';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import { currentElection, candidates as mockCandidates, results as mockResults, positions, Candidate } from '@/app/data/mockData';
-import { Users, Vote, TrendingUp, Settings, Calendar, UserPlus, BarChart, Loader2, Edit, X, Trash2, Save, Check } from 'lucide-react';
+import { Users, Vote, TrendingUp, Settings, Calendar, UserPlus, BarChart, Loader2, Edit, X, Trash2, Save, Check, Plus } from 'lucide-react';
 
 export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'overview' | 'elections' | 'candidates' | 'monitoring' | 'voters'>('overview');
@@ -41,6 +41,14 @@ export function AdminDashboard() {
   const [editCandidateName, setEditCandidateName] = useState('');
   const [editCandidatePosition, setEditCandidatePosition] = useState('');
   const [editCandidateEmail, setEditCandidateEmail] = useState('');
+
+  // Add candidate state
+  const [isAddingCandidate, setIsAddingCandidate] = useState(false);
+  const [newCandidateName, setNewCandidateName] = useState('');
+  const [newCandidatePosition, setNewCandidatePosition] = useState(positions[0]);
+  const [newCandidatePhoto, setNewCandidatePhoto] = useState('');
+  const [newCandidateAgenda, setNewCandidateAgenda] = useState('');
+  const [newCandidateEmail, setNewCandidateEmail] = useState('');
 
   useEffect(() => {
     async function fetchAdminStats() {
@@ -235,6 +243,43 @@ export function AdminDashboard() {
   const handleRemoveCandidate = (candidateId: string, candidateName: string) => {
     if (!window.confirm(`Are you sure you want to remove ${candidateName}? This action cannot be undone.`)) return;
     setCandidatesList(prev => prev.filter(c => c.id !== candidateId));
+  };
+
+  // Add candidate handlers
+  const handleAddCandidate = () => {
+    if (!newCandidateName.trim()) return alert('Candidate name is required.');
+    if (!newCandidatePosition) return alert('Position is required.');
+    if (!newCandidateEmail.trim()) return alert('Email is required.');
+
+    const newCandidate: Candidate = {
+      id: `new-${Date.now()}`,
+      name: newCandidateName.trim(),
+      position: newCandidatePosition,
+      photo: newCandidatePhoto.trim() || 'https://images.unsplash.com/photo-1511367461989-f85a21fda167?w=400',
+      agenda: newCandidateAgenda.trim() || 'No agenda provided',
+      vision: '',
+      goals: [],
+      actionPlan: '',
+      achievements: [],
+      email: newCandidateEmail.trim(),
+    };
+
+    setCandidatesList(prev => [newCandidate, ...prev]);
+    setNewCandidateName('');
+    setNewCandidatePosition(positions[0]);
+    setNewCandidatePhoto('');
+    setNewCandidateAgenda('');
+    setNewCandidateEmail('');
+    setIsAddingCandidate(false);
+  };
+
+  const handleCancelAddCandidate = () => {
+    setNewCandidateName('');
+    setNewCandidatePosition(positions[0]);
+    setNewCandidatePhoto('');
+    setNewCandidateAgenda('');
+    setNewCandidateEmail('');
+    setIsAddingCandidate(false);
   };
 
   const searchLower = searchQuery.toLowerCase();
@@ -573,11 +618,73 @@ export function AdminDashboard() {
               <Card>
                 <div className="flex items-center justify-between mb-6">
                   <h3>All Candidates ({candidatesList.length})</h3>
-                  <Button>
-                    <UserPlus size={16} className="mr-2" />
-                    Add Candidate
+                  <Button onClick={() => setIsAddingCandidate(!isAddingCandidate)}>
+                    {isAddingCandidate ? (
+                      <><X size={16} className="mr-2" />Cancel</>
+                    ) : (
+                      <><Plus size={16} className="mr-2" />Add Candidate</>
+                    )}
                   </Button>
                 </div>
+
+                {/* Add Candidate Form */}
+                {isAddingCandidate && (
+                  <div className="mb-6 p-5 bg-muted/30 border border-border rounded-lg space-y-4">
+                    <h4 className="text-foreground font-medium">New Candidate</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Input
+                        label="Name *"
+                        value={newCandidateName}
+                        onChange={(e) => setNewCandidateName(e.target.value)}
+                        placeholder="e.g., John Doe"
+                        fullWidth
+                      />
+                      <div>
+                        <label className="block mb-2 text-foreground">Position *</label>
+                        <select
+                          value={newCandidatePosition}
+                          onChange={(e) => setNewCandidatePosition(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                          {positions.map(pos => (
+                            <option key={pos} value={pos}>{pos}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <Input
+                        label="Email *"
+                        type="email"
+                        value={newCandidateEmail}
+                        onChange={(e) => setNewCandidateEmail(e.target.value)}
+                        placeholder="e.g., john@university.edu"
+                        fullWidth
+                      />
+                      <Input
+                        label="Photo URL"
+                        value={newCandidatePhoto}
+                        onChange={(e) => setNewCandidatePhoto(e.target.value)}
+                        placeholder="https://... (optional)"
+                        fullWidth
+                      />
+                    </div>
+                    <Input
+                      label="Agenda"
+                      value={newCandidateAgenda}
+                      onChange={(e) => setNewCandidateAgenda(e.target.value)}
+                      placeholder="Brief agenda or campaign slogan (optional)"
+                      fullWidth
+                    />
+                    <div className="flex gap-3 pt-1">
+                      <Button onClick={handleAddCandidate}>
+                        <Check size={16} className="mr-2" />
+                        Add Candidate
+                      </Button>
+                      <Button variant="outline" onClick={handleCancelAddCandidate}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="overflow-x-auto">
                   <table className="w-full">
